@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  jenkins_master:
+    image: radian/jenkins-chef
+    container_name: jenkins_master
+    restart: always
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins-data:/var/jenkins_home
+
+  jenkins_slave:
+    image: radian/jenkins-chef-agent
+    container_name: jenkins-chef-agent
+    restart: always
+    ports:
+      - "2222:22"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  jenkins-data:

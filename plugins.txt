@@ -1,0 +1,9 @@
+amazon-ecs
+blueocean
+bouncycastle-api
+chef-cookbook-pipeline
+cloudbees-folder
+credentials-binding
+jdk-tool
+simple-theme-plugin
+ssh-slaves

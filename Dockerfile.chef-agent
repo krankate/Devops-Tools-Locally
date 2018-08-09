@@ -1,0 +1,64 @@
+FROM openjdk:8-jdk
+
+ARG chef_channel=stable
+ARG chefdk_version=3.1.0
+
+ARG docker_version=18.03.1
+
+ARG user=jenkins
+ARG group=jenkins
+ARG uid=1000
+ARG gid=1000
+ARG JENKINS_AGENT_HOME=/home/${user}
+
+ENV JENKINS_AGENT_HONE ${JENKINS_AGENT_HOME}
+
+#ENV DEBIAN_FRONTEND=noninteractive \
+#    PATH=/opt/chefdk/bin:/opt/chefdk/embedded/bin:/root/.chefdk/gem/ruby/2.4.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# prereqs
+COPY ca-certs/ /usr/local/share/ca-certificates/
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends apt-transport-https ca-certificates curl software-properties-common && \
+    update-ca-certificates
+
+# install Docker
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add - && \
+    add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable" && \
+    apt-get update && \
+    apt-get install -y docker-ce=${docker_version}~ce-0~debian
+
+# install ChefDK
+RUN curl -fsSL \
+  "http://packages.chef.io/files/${chef_channel}/chefdk/${chefdk_version}/debian/$(lsb_release -rs | grep -oP "[0-9]+" | head -1)/chefdk_${chefdk_version}-1_amd64.deb" \
+  -o /tmp/chefdk.deb && \
+  dpkg -i /tmp/chefdk.deb && \
+  chef gem install kitchen-docker kitchen-dokken
+
+# setup SSH server
+RUN apt-get install -y --no-install-recommends openssh-server && \
+    sed -i /etc/ssh/sshd_config \
+        -e 's/#PermitRootLogin.*/PermitRootLogin no/' \
+        -e 's/#RSAAuthentication.*/RSAAuthentication yes/'  \
+        -e 's/#PasswordAuthentication.*/PasswordAuthentication yes/' \
+        -e 's/#SyslogFacility.*/SyslogFacility AUTH/' \
+        -e 's/#LogLevel.*/LogLevel INFO/' && \
+    mkdir /var/run/sshd
+
+# cleanup
+RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/
+
+# jenkins agent user
+RUN groupadd -g ${gid} ${group} && \
+    useradd -d "${JENKINS_AGENT_HOME}" -u "${uid}" -g "${gid}" -G docker -m -s /bin/bash "${user}" && \
+    echo "${user}:${user}" | chpasswd
+
+VOLUME "${JENKINS_AGENT_HOME}" "/tmp" "/run" "/var/run"
+WORKDIR "${JENKINS_AGENT_HOME}"
+VOLUME /var/run/docker.sock
+
+COPY setup-sshd /usr/local/bin/setup-sshd
+
+EXPOSE 22
+
+ENTRYPOINT ["setup-sshd"]
